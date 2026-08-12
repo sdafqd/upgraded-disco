@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>G Scripts</title>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+*:focus,*:active{outline:none}
+html,body{height:100dvh}
+body{
+  background:#09090b;
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+  font-family:'Geist','Inter',system-ui,sans-serif;
+  overflow:hidden;position:fixed;width:100%;
+}
+.bg{
+  position:fixed;inset:0;z-index:0;
+  background:#09090b;
+  overflow:hidden;
+}
+.bg::before{
+  content:'';
+  position:absolute;
+  width:600px;height:600px;
+  left:-100px;top:-150px;
+  background:radial-gradient(circle,rgba(21,128,61,.12) 0%,transparent 70%);
+  animation:bgm1 8s ease-in-out infinite alternate;
+}
+.bg::after{
+  content:'';
+  position:absolute;
+  width:500px;height:500px;
+  right:-80px;bottom:-100px;
+  background:radial-gradient(circle,rgba(88,28,135,.1) 0%,transparent 70%);
+  animation:bgm2 10s ease-in-out infinite alternate;
+}
+@keyframes bgm1{0%{transform:translate(0,0) scale(1)}100%{transform:translate(40px,30px) scale(1.1)}}
+@keyframes bgm2{0%{transform:translate(0,0) scale(1)}100%{transform:translate(-30px,-20px) scale(1.15)}}
+.grid{
+  position:fixed;inset:0;z-index:0;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:40px 40px;
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 40%,transparent 100%);
+}
+canvas{display:none}
+.shell{width:100%;max-width:400px;position:relative;z-index:1}
+.panel{
+  background:#111113;
+  border:1px solid #1f1f23;
+  border-radius:20px;
+  padding:clamp(20px,4vh,32px) clamp(18px,4vw,28px);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.02) inset,
+    0 20px 60px rgba(0,0,0,.7),
+    0 1px 0 rgba(255,255,255,.04) inset;
+}
+.brand{
+  margin-bottom:clamp(4px,1vh,8px);
+}
+.brand-name{
+  font-size:clamp(2.6rem,12vw,3.8rem);
+  font-weight:700;
+  color:#fafafa;
+  letter-spacing:-2.5px;
+  line-height:1;
+}
+.sep{display:none}
+.hero{margin-bottom:clamp(16px,3vh,22px)}
+.hero-title{display:none}
+.hero-desc{
+  font-size:clamp(.78rem,3vw,.85rem);
+  color:#52525b;font-weight:400;line-height:1.5;
+  margin-bottom:clamp(14px,2.5vh,20px);
+}
+.hero-desc.hidden{display:none}
+.tasks-label{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;
+}
+.tasks-label-text{
+  font-size:.72rem;font-weight:600;
+  color:#52525b;letter-spacing:.5px;text-transform:uppercase;
+}
+.tasks-label-count{
+  font-size:.72rem;font-weight:600;color:#71717a;
+  font-variant-numeric:tabular-nums;
+}
+.ptrack{
+  height:2px;background:#1f1f23;border-radius:2px;
+  margin-bottom:clamp(12px,2.5vh,18px);overflow:hidden;
+}
+.pbar{
+  height:100%;background:#22c55e;border-radius:2px;
+  width:0%;transition:width .5s cubic-bezier(.4,0,.2,1);
+}
+.task{
+  display:flex;align-items:center;gap:12px;
+  padding:clamp(12px,2vh,15px) clamp(14px,3vw,18px);
+  border-radius:14px;margin-bottom:8px;
+  font-size:clamp(.88rem,3.5vw,.95rem);
+  font-weight:500;color:#fafafa;
+  cursor:pointer;touch-action:manipulation;
+  transition:opacity .2s,transform .1s,box-shadow .2s;
+  border:1px solid rgba(255,255,255,.06);
+  min-height:clamp(52px,8vh,60px);
+  position:relative;
+}
+.task:last-child{margin-bottom:0}
+.task:active:not(.done):not(.busy):not(.off){transform:scale(.985)}
+.task.youtube{background:linear-gradient(135deg,#be0010,#dc2626);border-color:rgba(220,38,38,.3);--pulse-color:rgba(220,38,38,.2)}
+.task.discord{background:linear-gradient(135deg,#3730a3,#5865f2);border-color:rgba(88,101,242,.3);--pulse-color:rgba(88,101,242,.2)}
+.task.done{opacity:.25;pointer-events:none}
+.task.done .tx{text-decoration:line-through;text-decoration-color:rgba(255,255,255,.3)}
+.task.off{opacity:.1;pointer-events:none}
+.task.busy{pointer-events:none;opacity:.8}
+.task.busy{animation:pulseShadow 2s ease-in-out infinite}
+@keyframes pulseShadow{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 20px 0 var(--pulse-color)}}
+.ti{
+  width:32px;height:32px;flex-shrink:0;
+  background:rgba(0,0,0,.2);border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+}
+.ti svg{width:17px;height:17px;fill:#fff}
+.tx{flex:1;text-align:left;line-height:1.3}
+.busy .tx{display:none}
+.vfy{
+  display:none;align-items:center;gap:8px;
+  font-size:.8rem;color:rgba(255,255,255,.75);font-weight:400;
+}
+.busy .vfy{display:flex}
+.dots{display:inline-flex;gap:3px}
+.dots span{
+  width:3px;height:3px;background:#fff;border-radius:50%;
+  animation:db 1.2s ease-in-out infinite;opacity:.4;
+}
+.dots span:nth-child(2){animation-delay:.2s}
+.dots span:nth-child(3){animation-delay:.4s}
+@keyframes db{0%,60%,100%{transform:translateY(0);opacity:.3}30%{transform:translateY(-3px);opacity:1}}
+.arr{
+  width:16px;height:16px;opacity:.2;flex-shrink:0;
+  transition:opacity .2s,transform .15s;
+}
+.task:not(.done):not(.off):not(.busy):hover .arr{opacity:.5;transform:translateX(2px)}
+.ck{display:none;width:16px;height:16px;flex-shrink:0;opacity:.5}
+.done .arr{display:none}
+.done .ck{display:block}
+.sbox{
+  background:#0d0d0f;
+  border:1px solid #1f1f23;
+  border-radius:14px;padding:clamp(14px,2.5vh,20px);
+  margin-bottom:14px;
+  animation:fi .25s ease;
+}
+.sbox.hidden{display:none}
+@keyframes fi{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.slabel{
+  font-size:.65rem;font-weight:600;color:#3f3f46;
+  letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px;
+}
+pre{
+  background:#09090b;
+  color:#a1a1aa;
+  padding:12px 14px;border-radius:10px;
+  font-family:'SF Mono','Fira Code','JetBrains Mono',monospace;
+  font-size:clamp(.7rem,2.5vw,.75rem);
+  border:1px solid #1f1f23;
+  white-space:pre-wrap;word-break:break-all;
+  margin-bottom:12px;line-height:1.7;
+}
+.cpbtn{
+  width:100%;
+  background:#18181b;
+  border:1px solid #27272a;
+  color:#e4e4e7;
+  font-weight:600;font-size:.82rem;
+  font-family:'Geist','Inter',sans-serif;
+  padding:clamp(12px,2vh,14px);
+  border-radius:10px;cursor:pointer;
+  transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  letter-spacing:-.1px;touch-action:manipulation;
+}
+.cpbtn:hover{background:#1f1f23;border-color:#3f3f46}
+.cpbtn:active{transform:scale(.98)}
+.cpbtn.ok{background:#14532d;border-color:#16a34a;color:#4ade80}
+.ld,.er{
+  text-align:center;padding:20px;
+  font-size:.8rem;color:#3f3f46;letter-spacing:.3px;
+}
+.ld{animation:bl 1.5s ease-in-out infinite}
+@keyframes bl{0%,100%{opacity:.3}50%{opacity:1}}
+.er{color:#7f1d1d}
+.foot{
+  text-align:center;
+  margin-top:clamp(12px,2vh,18px);
+  font-size:.72rem;color:#52525b;
+  letter-spacing:1px;text-transform:uppercase;
+  font-weight:500;
+}
+</style>
+</head>
+<body>
+<div class="bg"></div>
+<div class="grid"></div>
+<div class="shell">
+  <div class="panel">
+    <div class="brand">
+      <span class="brand-name">G Scripts</span>
+    </div>
+    <div class="sep"></div>
+    <div class="hero">
+      <div class="hero-title">Complete tasks<br>to unlock.</div>
+      <div class="hero-desc" id="sub">Finish all tasks below to get your script.</div>
+    </div>
+    <div id="tc"></div>
+    <div class="sbox hidden" id="sb">
+      <div class="slabel">Your script</div>
+      <pre id="sc"></pre>
+      <button class="cpbtn" id="cb">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+        Copy to clipboard
+      </button>
+    </div>
+    <div class="foot">gscripts.xyz</div>
+  </div>
+</div>
+
+
+<<script>
+const MODE = 'online';
+const ONLINE_URL = 'https://gscripts.xyz/config.json';
+const SCRIPT_DIRECT = 'loadstring(game:HttpGet("https://gscripts.xyz/loader"))()';
+const ACCESS_DURATION = 3600000;
+
+const STORAGE_KEYS = {
+  COMPLETED: 'gs_completed',
+  TIMERS: 'gs_timers',
+  EXPIRY: 'gs_expiry'
+};
+
+const UI = {
+  wrapper: document.getElementById('tc'),
+  scriptContainer: document.getElementById('sb'),
+  codeBlock: document.getElementById('sc'),
+  copyButton: document.getElementById('cb'),
+  subtitle: document.getElementById('sub')
+};
+
+let totalTasks = 0;
+let tasksCompleted = 0;
+let isVerifying = false;
+let activeTimerId = null;
+
+const icons = {
+  youtube: '<svg viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+  discord: '<svg viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.373-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>'
+};
+
+const templates = {
+  arrow: '<svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
+  check: '<svg class="ck" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+};
+
+function formatTargetUrl(url, platform) {
+  if (platform !== 'youtube') return url;
+  
+  try {
+    const isChannelLink = url.includes('youtube.com/@') || url.includes('youtube.com/channel/');
+    if (isChannelLink) {
+      const parsedUrl = new URL(url);
+      if (!parsedUrl.searchParams.has('sub_confirmation')) {
+        parsedUrl.searchParams.set('sub_confirmation', '1');
+      }
+      return parsedUrl.toString();
+    }
+  } catch (err) {}
+  
+  return url;
+}
+
+function createTaskElement(task) {
+  const el = document.createElement('div');
+  el.className = `task ${task.platform}`;
+  el.id = `task_${task.id}`;
+  
+  const finalUrl = formatTargetUrl(task.link, task.platform);
+  el.dataset.url = finalUrl;
+  el.dataset.schema = task.schema || '';
+  
+  const iconHtml = icons[task.platform] || icons.youtube;
+  el.innerHTML = `
+    <div class="ti">${iconHtml}</div>
+    <span class="tx">${task.description}</span>
+    <span class="vfy">Verifying<span class="dots"><span></span><span></span><span></span></span></span>
+    ${templates.check}${templates.arrow}
+  `;
+  
+  return el;
+}
+
+function handleLinkRouting(url, schema) {
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  
+  if (isMobile && schema) {
+    window.location.href = schema + url.replace(/^https?:\/\//, '');
+    setTimeout(() => {
+      window.open(url, '_blank');
+    }, 800);
+  } else {
+    window.open(url, '_blank');
+  }
+}
+
+function calculateVerificationDelay() {
+  const minDelay = 8000;
+  const maxDelay = 20000;
+  return Math.floor(Math.random() * (maxDelay - minDelay)) + minDelay;
+}
+
+function handleExpiration() {
+  const expTime = localStorage.getItem(STORAGE_KEYS.EXPIRY);
+  if (expTime && Date.now() > Number(expTime)) {
+    localStorage.removeItem(STORAGE_KEYS.COMPLETED);
+    localStorage.removeItem(STORAGE_KEYS.TIMERS);
+    localStorage.removeItem(STORAGE_KEYS.EXPIRY);
+    location.reload();
+    return true;
+  }
+  return false;
+}
+
+function updateProgressUI() {
+  const bar = document.getElementById('pb');
+  const counter = document.getElementById('pc');
+  
+  if (bar) {
+    const percentage = (tasksCompleted / totalTasks) * 100;
+    bar.style.width = `${percentage}%`;
+  }
+  if (counter) {
+    counter.textContent = `${tasksCompleted}/${totalTasks}`;
+  }
+}
+
+function toggleOtherTasks(activeId, taskList, disabled) {
+  for (const task of taskList) {
+    if (task.id === activeId) continue;
+    
+    const taskEl = document.getElementById(`task_${task.id}`);
+    if (!taskEl) continue;
+    
+    if (disabled && !taskEl.classList.contains('done')) {
+      taskEl.classList.add('off');
+    } else {
+      taskEl.classList.remove('off');
+    }
+  }
+}
+
+function completeTask(btnEl, taskId, taskList) {
+  btnEl.dataset.s = 'done';
+  btnEl.classList.remove('busy');
+  btnEl.classList.add('done');
+  tasksCompleted++;
+  
+  updateProgressUI();
+
+  const completedIds = taskList
+    .filter(t => {
+      const el = document.getElementById(`task_${t.id}`);
+      return el && el.classList.contains('done');
+    })
+    .map(t => t.id);
+
+  localStorage.setItem(STORAGE_KEYS.COMPLETED, JSON.stringify(completedIds));
+
+  const activeTimers = JSON.parse(localStorage.getItem(STORAGE_KEYS.TIMERS) || '{}');
+  delete activeTimers[taskId];
+  delete activeTimers[`${taskId}_dur`];
+  localStorage.setItem(STORAGE_KEYS.TIMERS, JSON.stringify(activeTimers));
+
+  if (tasksCompleted === totalTasks) {
+    const nextExpiry = Date.now() + ACCESS_DURATION;
+    localStorage.setItem(STORAGE_KEYS.EXPIRY, String(nextExpiry));
+  }
+
+  isVerifying = false;
+  toggleOtherTasks(null, taskList, false);
+  activeTimerId = null;
+
+  if (tasksCompleted === totalTasks) {
+    UI.wrapper.style.display = 'none';
+    UI.scriptContainer.classList.remove('hidden');
+    if (UI.subtitle) UI.subtitle.classList.add('hidden');
+  }
+}
+
+function initSavedState(taskList) {
+  if (handleExpiration()) return;
+
+  const savedCompleted = localStorage.getItem(STORAGE_KEYS.COMPLETED);
+  if (savedCompleted) {
+    const parsedIds = JSON.parse(savedCompleted);
+    tasksCompleted = parsedIds.length;
+    
+    for (const task of taskList) {
+      const el = document.getElementById(`task_${task.id}`);
+      if (el && parsedIds.includes(task.id)) {
+        el.classList.add('done');
+        el.dataset.s = 'done';
+      }
+    }
+    
+    if (tasksCompleted === totalTasks) {
+      UI.wrapper.style.display = 'none';
+      UI.scriptContainer.classList.remove('hidden');
+      if (UI.subtitle) UI.subtitle.classList.add('hidden');
+    }
+  }
+
+  const savedTimers = localStorage.getItem(STORAGE_KEYS.TIMERS);
+  if (savedTimers) {
+    const parsedTimers = JSON.parse(savedTimers);
+    const currentTime = Date.now();
+    
+    for (const task of taskList) {
+      const el = document.getElementById(`task_${task.id}`);
+      if (!el || !parsedTimers[task.id] || el.classList.contains('done')) continue;
+      
+      const timeRemaining = parsedTimers[`${task.id}_dur`] - (currentTime - parsedTimers[task.id]);
+      
+      if (timeRemaining > 0) {
+        isVerifying = true;
+        el.dataset.s = 'busy';
+        el.classList.add('busy');
+        toggleOtherTasks(task.id, taskList, true);
+        activeTimerId = setTimeout(() => {
+          completeTask(el, task.id, taskList);
+        }, timeRemaining);
+      } else {
+        completeTask(el, task.id, taskList);
+      }
+    }
+  }
+
+  updateProgressUI();
+}
+
+function initializeTasks(taskList) {
+  for (const task of taskList) {
+    const btnEl = document.getElementById(`task_${task.id}`);
+    if (!btnEl) continue;
+    
+    btnEl.addEventListener('click', function() {
+      if (isVerifying || this.dataset.s === 'busy' || this.dataset.s === 'done') return;
+      
+      handleLinkRouting(this.dataset.url, this.dataset.schema);
+      
+      const requiredWaitTime = calculateVerificationDelay();
+      const currentTimers = JSON.parse(localStorage.getItem(STORAGE_KEYS.TIMERS) || '{}');
+      
+      currentTimers[task.id] = Date.now();
+      currentTimers[`${task.id}_dur`] = requiredWaitTime;
+      localStorage.setItem(STORAGE_KEYS.TIMERS, JSON.stringify(currentTimers));
+      
+      isVerifying = true;
+      this.dataset.s = 'busy';
+      this.classList.add('busy');
+      toggleOtherTasks(task.id, taskList, true);
+      
+      if (activeTimerId) {
+        clearTimeout(activeTimerId);
+      }
+      
+      activeTimerId = setTimeout(() => {
+        completeTask(this, task.id, taskList);
+      }, requiredWaitTime);
+    });
+  }
+}
+
+function mountInterface(taskList) {
+  const container = document.createElement('div');
+  container.id = 'ta';
+  
+  const progressHtml = `
+    <div class="tasks-label">
+      <span class="tasks-label-text">Tasks</span>
+      <span class="tasks-label-count" id="pc">0/${taskList.length}</span>
+    </div>
+    <div class="ptrack">
+      <div class="pbar" id="pb"></div>
+    </div>
+  `;
+  container.innerHTML = progressHtml;
+  
+  for (const task of taskList) {
+    container.appendChild(createTaskElement(task));
+  }
+  
+  UI.wrapper.innerHTML = '';
+  UI.wrapper.appendChild(container);
+  
+  totalTasks = taskList.length;
+  tasksCompleted = 0;
+  
+  initializeTasks(taskList);
+  initSavedState(taskList);
+}
+
+function unlockImmediately() {
+  UI.wrapper.innerHTML = '';
+  UI.codeBlock.textContent = SCRIPT_DIRECT;
+  UI.scriptContainer.classList.remove('hidden');
+  if (UI.subtitle) UI.subtitle.classList.add('hidden');
+}
+
+function bootstrapApp() {
+  UI.wrapper.innerHTML = '<div class="ld">Loading...</div>';
+  
+  fetch(`${ONLINE_URL}?v=${Date.now()}`)
+    .then(res => {
+      if (!res.ok) throw new Error('Network response was not ok');
+      return res.json();
+    })
+    .then(config => {
+      if (!config.missions || config.missions.length === 0) {
+        throw new Error('No missions found in configuration');
+      }
+      
+      if (config.code) {
+        UI.codeBlock.textContent = config.code;
+      }
+      mountInterface(config.missions);
+    })
+    .catch(err => {
+      console.error('Failed to load remote configuration:', err);
+      UI.wrapper.innerHTML = '<div class="er">Failed to load tasks.</div>';
+      unlockImmediately();
+    });
+}
+
+if (UI.copyButton) {
+  UI.copyButton.addEventListener('click', function() {
+    navigator.clipboard.writeText(UI.codeBlock.innerText);
+    
+    const originalHtml = this.innerHTML;
+    this.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+    this.classList.add('ok');
+    
+    setTimeout(() => {
+      this.innerHTML = originalHtml;
+      this.classList.remove('ok');
+    }, 2000);
+  });
+}
+
+if (MODE === 'direct') {
+  unlockImmediately();
+} else {
+  bootstrapApp();
+}
+</script>
+</body>
+</html>
