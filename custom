@@ -1412,6 +1412,7 @@ do
 		obj.ScreenGui.ResetOnSpawn = false
 		obj.ScreenGui.Parent = CoreGui
 		obj.Groups = {}
+		obj.Cache = {}
 		return obj
 	end
 
@@ -1419,8 +1420,39 @@ do
 		if not adornee then
 			return
 		end
+
+		local groupName = arg2.GroupName or "default"
+		local tbl2 = arg.Groups[groupName]
+		if not tbl2 then
+			tbl2 = {}
+			arg.Groups[groupName] = tbl2
+		end
+
+		local cached = arg.Cache[adornee]
+		if cached and cached.Highlight and cached.Highlight.Parent then
+			cached.Highlight.Adornee = adornee
+			cached.Highlight.FillColor = arg2.Color
+			cached.Highlight.OutlineColor = arg2.Color
+			cached.Highlight.FillTransparency = arg2.FillTransparency
+			cached.Highlight.OutlineTransparency = arg2.OutlineTransparency
+			cached.Highlight.Enabled = true
+
+			if cached.Billboard then
+				if arg2.Label then
+					cached.Billboard.Adornee = arg2.LabelAdornee or adornee
+					cached.Text.Text = arg2.Label
+					cached.Text.TextColor3 = arg2.Color
+					cached.Billboard.Enabled = true
+				else
+					cached.Billboard.Enabled = false
+				end
+			end
+			tbl2[#tbl2 + 1] = cached
+			return
+		end
+
 		local highlight = Instance.new("Highlight")
-		highlight.Name = "HL_" .. HttpService:GenerateGUID(false)
+		highlight.Name = "HL_" .. (adornee.Name or "Part")
 		highlight.Adornee = adornee
 		highlight.FillColor = arg2.Color
 		highlight.OutlineColor = arg2.Color
@@ -1428,28 +1460,21 @@ do
 		highlight.OutlineTransparency = arg2.OutlineTransparency
 		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 		highlight.Parent = arg.ScreenGui
-		local tbl2 = arg.Groups[arg2.GroupName]
 
-		if not tbl2 then
-			tbl2 = {}
-			arg.Groups[arg2.GroupName] = tbl2
-		end
-
-		table.insert(tbl2, highlight)
+		local entry = { Highlight = highlight, Adornee = adornee }
 
 		if arg2.Label then
 			local billboardGui = Instance.new("BillboardGui")
-			billboardGui.Name = "LBL_" .. HttpService:GenerateGUID(false)
+			billboardGui.Name = "LBL_" .. (adornee.Name or "Part")
 			billboardGui.Adornee = arg2.LabelAdornee or adornee
 			billboardGui.AlwaysOnTop = true
 			billboardGui.Size = UDim2.new(0, 140, 0, 16)
 			billboardGui.StudsOffset = Vector3.new(0, arg2.LabelAdornee and 2.2 or 2, 0)
-
 			if arg2.LabelMaxDistance then
 				billboardGui.MaxDistance = arg2.LabelMaxDistance
 			end
+		billboardGui.Parent = arg.ScreenGui
 
-			billboardGui.Parent = arg.ScreenGui
 			local textLabel = Instance.new("TextLabel")
 			textLabel.Size = UDim2.new(1, 0, 1, 0)
 			textLabel.BackgroundTransparency = 1
@@ -1458,12 +1483,18 @@ do
 			textLabel.TextColor3 = arg2.Color
 			textLabel.Text = arg2.Label
 			textLabel.Parent = billboardGui
+
 			local uiStroke = Instance.new("UIStroke")
 			uiStroke.Thickness = 0.5
 			uiStroke.Color = Color3.new(0, 0, 0)
 			uiStroke.Parent = textLabel
-			table.insert(tbl2, billboardGui)
+
+			entry.Billboard = billboardGui
+			entry.Text = textLabel
 		end
+
+		arg.Cache[adornee] = entry
+		tbl2[#tbl2 + 1] = entry
 	end
 
 	index.RemoveGroup = function(arg, arg2)
@@ -1472,24 +1503,29 @@ do
 			return
 		end
 
-		for _, v6 in ipairs(v5) do
-			v6.Adornee = nil
-			v6:Destroy()
+		for _, entry in ipairs(v5) do
+			if entry.Highlight then
+				entry.Highlight.Enabled = false
+			end
+			if entry.Billboard then
+				entry.Billboard.Enabled = false
+			end
 		end
 
-		arg.Groups[arg2] = nil
+		arg.Groups[arg2] = {}
 	end
 
 	index.Destroy = function(arg)
-		for k in pairs(arg.Groups) do
-			arg:RemoveGroup(k)
+		for k, v in pairs(arg.Cache) do
+			if v.Highlight then v.Highlight:Destroy() end
+			if v.Billboard then v.Billboard:Destroy() end
 		end
-
+		arg.Cache = {}
+		arg.Groups = {}
 		if arg.ScreenGui then
 			arg.ScreenGui:Destroy()
 		end
 	end
-
 	v3 = index.new()
 
 	fn = function()
@@ -1563,20 +1599,14 @@ do
 			return
 		end
 		arg.Visible = false
-
-		table.insert(ROLEBOX.conns, arg:GetPropertyChangedSignal("Visible"):Connect(function()
-			if arg.Visible then
-				arg.Visible = false
-			end
-		end))
 	end
 
 	ROLEBOX.watch = function(arg)
-		for _, descendant in ipairs(arg:GetDescendants()) do
-			ROLEBOX.hide(descendant)
+		for _, descendant in ipairs(arg:GetChildren()) do
+			if descendant:IsA("BoxHandleAdornment") then
+				descendant.Visible = false
+			end
 		end
-
-		table.insert(ROLEBOX.conns, arg.DescendantAdded:Connect(ROLEBOX.hide))
 	end
 
 	ROLEBOX.start = function()
@@ -1584,7 +1614,6 @@ do
 			if player.Character then
 				ROLEBOX.watch(player.Character)
 			end
-
 			table.insert(ROLEBOX.conns, player.CharacterAdded:Connect(ROLEBOX.watch))
 		end
 
@@ -1599,22 +1628,10 @@ do
 				conn:Disconnect()
 			end)
 		end
-
 		ROLEBOX.conns = {}
-
-		for _, player in ipairs(Players:GetPlayers()) do
-			if player.Character then
-				for _, descendant in ipairs(player.Character:GetDescendants()) do
-					if descendant:IsA("BoxHandleAdornment") then
-						descendant.Visible = true
-					end
-				end
-			end
-		end
 	end
 
 	ROLEBOX.start()
-
 	fn3 = function()
 		return flag or flag2 or flag3
 	end
@@ -1695,26 +1712,29 @@ do
 			return
 		end
 
-		for _, descendant in ipairs(Workspace:GetDescendants()) do
-			if descendant.Name == "GunDrop" and (descendant:IsA("BasePart") or descendant:IsA("Model")) then
-				fn11(descendant)
-			end
+		local drop = fn52 and fn52() or Workspace:FindFirstChild("GunDrop") or Workspace:FindFirstChild("GunDrop", true)
+		if drop and (drop:IsA("BasePart") or drop:IsA("Model")) then
+			fn11(drop)
 		end
 	end
-
 	fn6 = function()
 		v3:RemoveGroup("trap")
 		if not flag5 then
 			return
 		end
 
-		for _, descendant in ipairs(Workspace:GetDescendants()) do
-			if descendant.Name == "Trap" and descendant.Parent and (descendant.Parent:IsA("Folder") or descendant.Parent:IsA("Model")) then
-				fn12(descendant)
+		for _, child in ipairs(Workspace:GetChildren()) do
+			if child.Name == "Trap" then
+				fn12(child)
+			elseif child:IsA("Folder") or child:IsA("Model") then
+				for _, sub in ipairs(child:GetChildren()) do
+					if sub.Name == "Trap" then
+						fn12(sub)
+					end
+				end
 			end
 		end
 	end
-
 	local n = 0
 
 	tbl.espRecolourSoon = function()
@@ -1734,7 +1754,12 @@ do
 
 	pcall(function()
 		tbl.conns[#tbl.conns + 1] = Workspace.DescendantAdded:Connect(function(descendant)
-			if flag5 and descendant.Name == "Trap" and descendant.Parent and (descendant.Parent:IsA("Folder") or descendant.Parent:IsA("Model")) then
+			local dname = descendant.Name
+			if dname ~= "GunDrop" and dname ~= "Gun" and dname ~= "Trap" then
+				return
+			end
+
+			if flag5 and dname == "Trap" and descendant.Parent and (descendant.Parent:IsA("Folder") or descendant.Parent:IsA("Model")) then
 				fn12(descendant)
 			end
 
@@ -2053,20 +2078,24 @@ do
 	local jobId = game.JobId
 	flag6 = false
 
-	fn9 = function(arg)
+	fn9 = function(arg, silent)
 		if flag6 then
-			v:Notify({
-				Title = "Fling Active!",
-				Content = "Wait for the current fling to finish!",
-				Duration = 1.5,
-				Icon = "clock",
-			})
+			if not silent then
+				v:Notify({
+					Title = "Fling Active!",
+					Content = "Wait for the current fling to finish!",
+					Duration = 1.5,
+					Icon = "clock",
+				})
+			end
 
 			return
 		end
 
 		if not arg or not arg.Character then
-			v:Notify({ Title = "Error!", Content = "Could not find that player!", Duration = 1.5, Icon = "x" })
+			if not silent then
+				v:Notify({ Title = "Error!", Content = "Could not find that player!", Duration = 1.5, Icon = "x" })
+			end
 			return
 		end
 
@@ -2175,7 +2204,7 @@ do
 						task.wait()
 					end
 
-					if not (arg2.Velocity.Magnitude > 500 or arg2.Parent ~= arg.Character or arg.Parent ~= Players or humanoid.Health <= 0 or humanoid.Health < health or humanoid2 and humanoid2.Sit or tick() > now + 2 or not flag6) then
+					if not (arg2.Velocity.Magnitude > 500 or arg2.Parent ~= arg.Character or arg.Parent ~= Players or humanoid.Health <= 0 or humanoid.Health < health or humanoid2 and (humanoid2.Sit or humanoid2.Health <= 0) or tick() > now + 2 or not flag6) then
 						continue
 					end
 				end
@@ -2249,15 +2278,17 @@ do
 				Duration = 3,
 				Icon = "x",
 			})
-		elseif humanoid.Health < health then
+		elseif not silent then
+			if humanoid.Health < health then
 			v:Notify({
 				Title = "Flinged!",
 				Content = "Flinged " .. arg.Name .. " - took a hit, bailed early.",
 				Duration = 2,
 				Icon = "flame",
 			})
-		else
+			else
 			v:Notify({ Title = "Flinged!", Content = "Flinged " .. arg.Name .. "!", Duration = 1.5, Icon = "flame" })
+			end
 		end
 	end
 
@@ -2686,26 +2717,35 @@ do
 			return
 		end
 
+		local cachedParts = {}
+		local lastChar = nil
+
 		connection = RunService.Stepped:Connect(function()
 			if not flag8 then
 				return
 			end
 
-			pcall(function()
-				local character = localPlayer.Character
-
-				if character then
+			local character = localPlayer.Character
+			if character then
+				if character ~= lastChar then
+					lastChar = character
+					cachedParts = {}
 					for _, descendant in ipairs(character:GetDescendants()) do
-						if descendant:IsA("BasePart") and descendant.CanCollide then
-							if tbl.clipWas[descendant] == nil then
-								tbl.clipWas[descendant] = true
-							end
-
-							descendant.CanCollide = false
+						if descendant:IsA("BasePart") then
+							cachedParts[#cachedParts + 1] = descendant
 						end
 					end
 				end
-			end)
+
+				for _, descendant in ipairs(cachedParts) do
+					if descendant.Parent and descendant.CanCollide then
+						if tbl.clipWas[descendant] == nil then
+							tbl.clipWas[descendant] = true
+						end
+						descendant.CanCollide = false
+					end
+				end
+			end
 		end)
 	end
 
@@ -2994,12 +3034,11 @@ do
 		if not coinContainer then
 			return nil
 		end
-		local v8 = next
-		local children, v9 = coinContainer:GetChildren()
+		local children = coinContainer:GetChildren()
 		local huge = math.huge
 		local v10 = nil
 
-		for _, v11 in v8, children, v9 do
+		for _, v11 in ipairs(children) do
 			if v11.Name == "Coin_Server" and not v11:GetAttribute("Collected") and not tbl.coinSkip(v11) then
 				local magnitude = (v7.Position - v11.Position).Magnitude
 
@@ -3266,30 +3305,7 @@ do
 					if not char or not hum or hum.Health <= 0 then
 						flag15 = false
 					else
-						local now = tick()
-
-						if now - lastDataPoll > 1.5 then
-							lastDataPoll = now
-							local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-							local extras = remotes and remotes:FindFirstChild("Extras")
-							local getPlayerData = extras and extras:FindFirstChild("GetPlayerData")
-
-							if getPlayerData then
-								local ok, result = pcall(function()
-									return getPlayerData:InvokeServer()
-								end)
-
-								if ok and result then
-									local flag19 = result[localPlayer.Name]
-
-									if flag19 then
-										flag19 = not flag19.Dead and not flag19.Killed
-									end
-
-									flag15 = flag19
-								end
-							end
-						end
+						flag15 = not tbl.roundDead
 					end
 
 					if not (v4 and v4.Parent == Workspace and (v4:FindFirstChild("CoinAreas") or v4:FindFirstChild("CoinContainer"))) then
@@ -3578,239 +3594,6 @@ do
 		end)
 	end
 
-	tbl.claimRewardPopup = function()
-		local playerGui = localPlayer:FindFirstChild("PlayerGui")
-		if not playerGui then
-			return false
-		end
-		local claim = nil
-		local crossPlatform = playerGui:FindFirstChild("CrossPlatform")
-		local medium = crossPlatform and crossPlatform:FindFirstChild("NewItem") and crossPlatform.NewItem:FindFirstChild("Medium")
-
-		if medium and medium.Visible then
-			claim = medium:FindFirstChild("Container") and medium.Container:FindFirstChild("Claim")
-		else
-			medium = playerGui:FindFirstChild("MainGUI") and playerGui.MainGUI:FindFirstChild("Game")
-			medium = medium and medium:FindFirstChild("NewItem")
-			local visible = medium and medium.Visible
-			local v7 = nil
-
-			if visible then
-				claim = medium:FindFirstChild("Container") and medium.Container:FindFirstChild("Claim")
-			else
-				medium = v7
-			end
-		end
-
-		if not medium or not claim then
-			return false
-		end
-		local amount = medium:FindFirstChild("Amount", true)
-		local label = medium:FindFirstChild("Label", true)
-		local icon = medium:FindFirstChild("Icon", true)
-		local text = amount and amount.Text or nil
-		local text2 = label and label.Text or nil
-		local match = icon and tostring(icon.Image):match("%d+") or nil
-
-		task.spawn(function()
-			pcall(tbl.whReward, text, text2, match)
-		end)
-
-		if getconnections then
-			for _, v7 in ipairs({ "Activated", "MouseButton1Click" }) do
-				local ok, result = pcall(getconnections, claim[v7])
-
-				if ok and result and #result > 0 then
-					for _, v8 in next, result, nil do
-						pcall(function()
-							v8:Fire()
-						end)
-					end
-
-					return true
-				end
-			end
-		end
-
-		return (pcall(function()
-			local VirtualInputManager = game:GetService("VirtualInputManager")
-			local absolutePosition = claim.AbsolutePosition
-			local absoluteSize = claim.AbsoluteSize
-			local n4 = absolutePosition.X + absoluteSize.X / 2
-			local n5 = absolutePosition.Y + absoluteSize.Y / 2 + 36
-			VirtualInputManager:SendMouseButtonEvent(n4, n5, 0, true, game, 1)
-			task.wait(0.05)
-			VirtualInputManager:SendMouseButtonEvent(n4, n5, 0, false, game, 1)
-		end))
-	end
-
-	tbl.startShells = function()
-		if tbl.shellsRunning then
-			return
-		end
-		tbl.shellsRunning = true
-
-		task.spawn(function()
-			while tbl.shellsOn do
-				task.wait(0.5)
-				pcall(tbl.claimRewardPopup)
-			end
-
-			tbl.shellsRunning = false
-		end)
-	end
-
-	tbl.stopShells = function()
-		tbl.shellsOn = false
-	end
-
-	tbl.SBOX_DELAY = 1
-	tbl.CUR_NAME = { SummerKey2026 = "Shells" }
-
-	tbl.curName = function(arg)
-		return tbl.CUR_NAME[arg] or tostring(arg)
-	end
-
-	tbl.BOX_CURRENCY = { Summer2026Box = "SummerKey2026" }
-
-	tbl.BOXES = {
-		{ "Summer2026Box", "Summer Box '26" },
-		{ "MysteryBox1", "Mystery Box #1" },
-		{ "MysteryBox2", "Mystery Box #2" },
-		{ "KnifeBox1", "Knife Box #1" },
-		{ "KnifeBox2", "Knife Box #2" },
-		{ "KnifeBox3", "Knife Box #3" },
-		{ "KnifeBox4", "Knife Box #4" },
-		{ "KnifeBox5", "Knife Box #5" },
-		{ "GunBox1", "Gun Box #1" },
-		{ "GunBox2", "Gun Box #2" },
-		{ "GunBox3", "Gun Box #3" },
-		{ "MLG Box", "Rainbow Box" },
-	}
-
-	tbl.boxOn = {}
-	tbl.boxRunning = {}
-	tbl.boxWaiting = {}
-
-	tbl.boxPrice = function(arg)
-		local str = tbl.BOX_CURRENCY[arg] or "Coins"
-		local ok, result = pcall(require, game:GetService("ReplicatedStorage").Database.Sync.NewShop)
-		if not ok or type(result) ~= "table" then
-			return str, nil
-		end
-		local v7 = result[arg]
-		local price = type(v7) == "table" and type(v7.Price) == "table" and v7.Price or nil
-		return str, price and tonumber(price[str]) or nil
-	end
-
-	tbl.boxImage = function(arg)
-		local ok, result = pcall(require, game:GetService("ReplicatedStorage").Database.Sync.MysteryBox)
-		if not ok or type(result) ~= "table" then
-			return nil
-		end
-		local v7 = result[arg]
-		return type(v7) == "table" and v7.Image or nil
-	end
-
-	tbl.boxFunds = function(arg)
-		local v7 = tbl.readOwned()
-		if not v7 then
-			return nil
-		end
-		return tonumber(v7[arg]) or 0
-	end
-
-	tbl.openBox = function(arg)
-		local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
-		remotes = remotes and remotes:FindFirstChild("Shop")
-		remotes = remotes and remotes:FindFirstChild("OpenCrate")
-		if not remotes then
-			return nil, "the OpenCrate remote is gone"
-		end
-		local str = tbl.BOX_CURRENCY[arg] or "Coins"
-
-		local ok, result = pcall(function()
-			return remotes:InvokeServer(arg, "MysteryBox", str)
-		end)
-
-		if not ok then
-			return nil, tostring(result)
-		end
-		return result
-	end
-
-	tbl.startBox = function(arg, arg2)
-		if tbl.boxRunning[arg] then
-			return
-		end
-		tbl.boxRunning[arg] = true
-
-		task.spawn(function()
-			local n4 = 0
-
-			while tbl.boxOn[arg] do
-				local v7, v8 = tbl.boxPrice(arg)
-				local v9 = tbl.boxFunds(v7)
-
-				if v8 and v9 and v9 < v8 then
-					if not tbl.boxWaiting[arg] then
-						tbl.boxWaiting[arg] = true
-
-						v:Notify({
-							Title = arg2,
-							Content = "Waiting for " .. tbl.comma(v8 - v9) .. " more " .. tbl.curName(v7) .. ". It opens on its own once you can afford one.",
-							Duration = 5,
-							Icon = "clock",
-						})
-					end
-
-					task.wait(5)
-				else
-					tbl.boxWaiting[arg] = false
-					local v10, v11 = tbl.openBox(arg)
-
-					if not v10 then
-						local v12 = tbl.boxFunds(v7)
-
-						if v8 and v12 and v12 < v8 then
-							task.wait(5)
-						else
-							tbl.boxOn[arg] = false
-
-							if tbl.el.box and tbl.el.box[arg] then
-								tbl.setToggle(tbl.el.box[arg], false)
-							end
-
-							v:Notify({
-								Title = arg2,
-								Content = (n4 > 0 and "Opened " .. n4 .. ", then stopped: " or "Nothing opened: ") .. (v11 or "the server refused") .. ".",
-								Duration = 6,
-								Icon = "x",
-							})
-
-							break
-						end
-					else
-						n4 += 1
-
-						task.spawn(function()
-							pcall(tbl.whBox, v10)
-						end)
-
-						task.wait(tbl.SBOX_DELAY)
-					end
-				end
-			end
-
-			tbl.boxRunning[arg] = false
-			tbl.boxWaiting[arg] = false
-		end)
-	end
-
-	tbl.stopBox = function(arg)
-		tbl.boxOn[arg] = false
-	end
-
 	_G.__GScriptsBuild = "gatestyle-38"
 	_G.__GScriptsGen = (_G.__GScriptsGen or 0) + 1
 	tbl.gen = _G.__GScriptsGen
@@ -3819,661 +3602,10 @@ do
 		return tbl.gen == _G.__GScriptsGen
 	end
 
-	tbl.WH_URL = ""
-	tbl.whOn = false
-
-	tbl.whUrlNow = function()
-		return (tostring(tbl.WH_URL or ""):gsub("^%s+", ""):gsub("%s+$", ""))
-	end
-
-	tbl.WH_HOSTS = { "discord.com", "discordapp.com", "canary.discord.com", "ptb.discord.com" }
-
-	tbl.whReady = function()
-		if not tbl.current() then
-			return false
-		end
-
-		if not tbl.whOn then
-			return false
-		end
-
-		if tbl.whBreak then
-			return false
-		end
-		local v7 = tbl.whUrlNow()
-
-		for _, whHost in ipairs(tbl.WH_HOSTS) do
-			if v7:find("^https://" .. whHost:gsub("%.", "%%.") .. "/api/webhooks/") then
-				return true
-			end
-		end
-
-		return false
-	end
-
-	tbl.COIN_ICON = "197012173"
-	tbl.CLR_LINE = 1
-	tbl.BANNER = ""
-
 	tbl.comma = function(arg)
-		local num = tonumber(arg)
-		if num == nil then
-			return "?"
-		end
-		local str = num < 0 and "-" or ""
-		local v7 = tostring
-		local v8 = table.pack(math.floor(math.abs(num)))
-		return str .. v7(table.unpack(v8, 1, v8.n)):reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
-	end
-
-	tbl.fld = function(arg, arg2, arg3)
-		return { name = arg, value = arg2, inline = arg3 ~= false }
-	end
-
-	tbl.avatarUrl = function()
-		if tbl.avatarCache ~= nil then
-			return tbl.avatarCache or nil
-		end
-		local localPlayer2 = game:GetService("Players").LocalPlayer
-
-		local ok, result = pcall(function()
-			return game:HttpGet("https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=" .. tostring(localPlayer2.UserId) .. "&size=150x150&format=Png&isCircular=false")
-		end)
-
-		local match = ok and type(result) == "string" and result:match("\"imageUrl\"%s*:%s*\"([^\"]+)\"") or nil
-		tbl.avatarCache = match or false
-		return match
-	end
-
-	tbl.markUrl = function()
-		if tbl.markCache then
-			return tbl.markCache
-		end
-		local match = tbl.markIcon and tostring(tbl.markIcon.Image):match("(%d+)")
-		if not match then
-			return nil
-		end
-		tbl.markCache = tbl.itemThumb(match) or nil
-		return tbl.markCache
-	end
-
-	tbl.FARM_FLAGS = {
-		{ "Toggle_Coin_Autofarm", "Coin Autofarm" },
-		{ "Slider_Farm_Speed", "Farm Speed" },
-		{ "Toggle_Discord_Sender", "Discord Sender" },
-		{ "Toggle_Farm_Perf_Master", "Performance Mode" },
-		{ "Toggle_Farm_Dead_Hop", "Hop When Server Dies" },
-		{ "Toggle_Anti_AFK", "Anti-AFK" },
-		{ "Toggle_Auto_Reset_When_Bag_Full", "Auto-Reset When Bag Full" },
-		{ "Toggle_Auto_Claim_Shells", "Auto Claim Shells" },
-		{ "Toggle_Auto_Summer_Box", "Auto Open Summer Box" },
-		{ "Toggle_Fling_Murderer_When_Done", "Fling Murderer When Done" },
-		{ "Toggle_Kill_All_When_Bag_Full", "Kill All When Bag Full" },
-	}
-
-	tbl.flagText = function(arg, arg2)
-		if arg == "Toggle_Discord_Sender" then
-			return tbl.whOn and "on" or "off"
-		end
-
-		if arg2.__type == "Slider" then
-			return type(arg2.Value) == "table" and tostring(arg2.Value.Default) or tostring(arg2.Value)
-		end
-		return arg2.Value == true and "on" or "off"
-	end
-
-	tbl.settingsBlob = function()
-		local elements = tbl.config and tbl.config.Elements
-		if type(elements) ~= "table" then
-			return "_unavailable_"
-		end
-		local tbl2 = {}
-		local n4 = 0
-
-		for _, farmFlag in ipairs(tbl.FARM_FLAGS) do
-			local v7 = elements[farmFlag[1]]
-
-			if type(v7) == "table" then
-				tbl2[#tbl2 + 1] = { farmFlag[2], tbl.flagText(farmFlag[1], v7) }
-
-				if n4 < #farmFlag[2] then
-					n4 = #farmFlag[2]
-				end
-			end
-		end
-
-		if #tbl2 == 0 then
-			return "_unavailable_"
-		end
-		local tbl3 = {}
-
-		for _, v7 in ipairs(tbl2) do
-			local n5 = #tbl3 + 1
-			local v8 = v7[2]
-			tbl3[n5] = v7[1] .. string.rep(" ", n4 - #v7[1] + 2) .. v8
-		end
-
-		local str = "```\n" .. table.concat(tbl3, "\n") .. "\n```"
-
-		if #str > 1000 then
-			str = str:sub(1, 986) .. "\n...\n```"
-		end
-
-		return str
-	end
-
-	tbl.setState = function()
-		local elements = tbl.config and tbl.config.Elements
-		if type(elements) ~= "table" then
-			return nil
-		end
-		local tbl2 = {}
-
-		for _, farmFlag in ipairs(tbl.FARM_FLAGS) do
-			local v7 = elements[farmFlag[1]]
-
-			if type(v7) == "table" then
-				tbl2[farmFlag[1]] = tbl.flagText(farmFlag[1], v7)
-			end
-		end
-
-		return tbl2
-	end
-
-	tbl.setDiff = function(arg, arg2)
-		if type(arg) ~= "table" or type(arg2) ~= "table" then
-			return {}
-		end
-		local tbl2 = {}
-
-		for _, farmFlag in ipairs(tbl.FARM_FLAGS) do
-			tbl2[farmFlag[1]] = farmFlag[2]
-		end
-
-		local tbl3 = {}
-
-		for k, v7 in pairs(arg2) do
-			if arg[k] ~= nil and arg[k] ~= v7 then
-				tbl3[#tbl3 + 1] = "**" .. tostring(tbl2[k] or k) .. "**  " .. tostring(arg[k]) .. "  ->  **" .. tostring(v7) .. "**"
-			end
-		end
-
-		table.sort(tbl3)
-		return tbl3
-	end
-
-	tbl.whSettings = function(arg)
-		if not tbl.whReady() then
-			return false, "not sending"
-		end
-		local flag19 = arg and #arg > 0
-		local str = "Autofarm settings changed."
-
-		if flag19 then
-			str = table.concat(arg, "\n")
-
-			if #str > 3500 then
-				str = str:sub(1, 3480) .. "\n..."
-			end
-		end
-
-		return tbl.whPost({
-			title = "Settings Changed",
-			body = str,
-			thumb = tbl.avatarUrl(),
-			fields = { { name = "Autofarm Settings", value = tbl.settingsBlob(), inline = false } },
-		})
-	end
-
-	task.spawn(function()
-		task.wait(15)
-		tbl.setSnap = tbl.setState()
-
-		while true do
-			task.wait(3)
-
-			if not tbl.current() then
-				break
-			else
-				local v7 = tbl.setState()
-
-				if v7 and tbl.setSnap then
-					if #tbl.setDiff(tbl.setSnap, v7) > 0 then
-						task.wait(3)
-						local v8 = tbl.setState() or v7
-						local v9 = tbl.setDiff(tbl.setSnap, v8)
-						tbl.setSnap = v8
-
-						if #v9 > 0 and tbl.whReady() then
-							task.spawn(function()
-								pcall(tbl.whSettings, v9)
-							end)
-						end
-					end
-				elseif v7 then
-					tbl.setSnap = v7
-				end
-			end
-		end
-	end)
-
-	tbl.whHello = function()
-		if tbl.saidHello then
-			return true, "already sent"
-		end
-		local localPlayer2 = game:GetService("Players").LocalPlayer
-		tbl.readCoins()
-		tbl.readShells()
-		local whPost = tbl.whPost
-
-		local tbl2 = {
-			title = "GScripts logger started",
-			body = "Logging as **" .. localPlayer2.DisplayName .. "** since <t:" .. tostring(os.time()) .. ":f>.",
-			thumb = tbl.avatarUrl(),
-			wait = true,
-		}
-
-		local pad3 = tbl.pad3
-		local tbl3 = {}
-		local v7 = tbl.fld("User ID", "`" .. tostring(localPlayer2.UserId) .. "`")
-		local Coins = tbl.fld("Coins", "`" .. tbl.comma(tbl.coinsTotal) .. "`")
-		local Shells = tbl.fld("Shells", "`" .. tbl.comma(tbl.shellsLeft) .. "`")
-		local fld = tbl.fld
-		local v8 = tbl.settingsBlob()
-		tbl3[1] = v7
-		tbl3[2] = Coins
-		tbl3[3] = Shells
-
-		do
-			local values = table.pack(fld("Autofarm settings", v8, false))
-			table.move(values, 1, values.n, 4, tbl3)
-		end
-
-		tbl2.fields = pad3(tbl3)
-		local v9, v10 = whPost(tbl2)
-
-		if v9 then
-			tbl.saidHello = true
-		end
-
-		return v9, v10
-	end
-
-	tbl.whQ = {}
-	tbl.whQBusy = false
-	tbl.whSentN = 0
-	tbl.whDropped = 0
-	tbl.whLastErr = nil
-	tbl.whBreak = false
-
-	tbl.whSend = function(arg)
-		local request_ = syn and syn.request or request or http_request or http and http.request
-		if not request_ then
-			return false, "no request function", nil
-		end
-
-		local ok, result = pcall(request_, {
-			Url = tbl.whUrlNow(),
-			Method = "POST",
-			Headers = { ["Content-Type"] = "application/json" },
-			Body = arg,
-		})
-
-		if not ok then
-			return false, "request failed", 5
-		end
-		local n4 = tonumber(type(result) == "table" and (result.StatusCode or result.Status) or nil) or 0
-		if n4 == 204 or n4 == 200 or n4 == 0 and type(result) == "table" and result.Success == true then
-			return true, tostring(n4), nil
-		end
-
-		if n4 == 429 then
-			local flag19 = type(result) == "table"
-
-			if flag19 then
-				flag19 = tostring(result.Body or "")
-			end
-
-			return false, "429", math.min(60, (tonumber((flag19 or ""):match("\"retry_after\"%s*:%s*([%d%.]+)")) or 1) + 0.25)
-		end
-
-		if n4 >= 500 then
-			return false, tostring(n4), 5
-		end
-		return false, tostring(n4), nil
-	end
-
-	tbl.whPump = function()
-		if tbl.whQBusy then
-			return
-		end
-		tbl.whQBusy = true
-
-		task.spawn(function()
-			while #tbl.whQ > 0 and tbl.current() and not tbl.whBreak do
-				local v7 = tbl.whQ[1]
-				local v8, v9, v10 = tbl.whSend(v7.body)
-
-				if v8 then
-					table.remove(tbl.whQ, 1)
-					tbl.whSentN = tbl.whSentN + 1
-					tbl.whLastErr = nil
-					v7.ok = true
-					v7.code = v9
-					v7.done = true
-					task.wait(0.35)
-				elseif v10 then
-					task.wait(v10)
-				else
-					table.remove(tbl.whQ, 1)
-					tbl.whDropped = tbl.whDropped + 1
-					tbl.whLastErr = v9
-					v7.ok = false
-					v7.code = v9
-					v7.done = true
-
-					if v9 == "401" or v9 == "403" or v9 == "404" then
-						tbl.whBreak = true
-
-						v:Notify({
-							Title = "Webhook Rejected",
-							Content = "Discord answered " .. v9 .. ". The webhook was deleted or revoked, so sending has stopped. Paste a new one.",
-							Duration = 10,
-							Icon = "x",
-						})
-					end
-				end
-			end
-
-			if tbl.whBreak then
-				for _, v7 in ipairs(tbl.whQ) do
-					v7.done = true
-					v7.ok = false
-					v7.code = "stopped"
-				end
-
-				tbl.whDropped = tbl.whDropped + #tbl.whQ
-				tbl.whQ = {}
-			end
-
-			tbl.whQBusy = false
-		end)
-	end
-
-	tbl.whPost = function(arg)
-		if not tbl.whReady() then
-			return false, "no webhook set"
-		end
-		local localPlayer2 = game:GetService("Players").LocalPlayer
-
-		local tbl2 = {
-			title = arg.title,
-			description = arg.body,
-			color = tbl.CLR_LINE,
-			timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-			author = {
-				name = localPlayer2.Name .. "  (" .. localPlayer2.DisplayName .. ")",
-				url = "https://www.roblox.com/users/" .. tostring(localPlayer2.UserId) .. "/profile",
-				icon_url = tbl.avatarUrl(),
-			},
-			footer = { text = tostring(game.JobId), icon_url = tbl.markUrl() },
-		}
-
-		if arg.thumb then
-			tbl2.thumbnail = { url = arg.thumb }
-		end
-
-		if tbl.BANNER ~= "" then
-			tbl2.image = { url = tbl.BANNER }
-		end
-
-		if arg.fields and #arg.fields > 0 then
-			tbl2.fields = arg.fields
-		end
-
-		local tbl3 = {
-			username = "gscripts",
-			avatar_url = tbl.markUrl(),
-			allowed_mentions = { parse = {} },
-			embeds = { tbl2 },
-		}
-
-		if arg.ping then
-			tbl3.content = "@everyone"
-			tbl3.allowed_mentions = { parse = { "everyone" } }
-		end
-
-		local ok, result = pcall(function()
-			return game:GetService("HttpService"):JSONEncode(tbl3)
-		end)
-
-		if not ok then
-			return false, "could not encode the payload"
-		end
-		local tbl4 = { body = result, done = false }
-
-		if #tbl.whQ >= 40 then
-			local v7 = table.remove(tbl.whQ, 1)
-			v7.done = true
-			v7.ok = false
-			v7.code = "dropped"
-			tbl.whDropped = tbl.whDropped + 1
-		end
-
-		tbl.whQ[#tbl.whQ + 1] = tbl4
-		tbl.whPump()
-		if not arg.wait then
-			return true, "queued"
-		end
-		local now = os.clock()
-
-		while not tbl4.done and os.clock() - now < 25 do
-			task.wait(0.1)
-		end
-
-		if not tbl4.done then
-			return false, "no answer from Discord"
-		end
-		return tbl4.ok, tbl4.code
-	end
-
-	task.spawn(function()
-		tbl.avatarUrl()
-		task.wait(4)
-		tbl.markUrl()
-		tbl.itemThumb(tbl.COIN_ICON)
-	end)
-
-	tbl.thumbCache = {}
-
-	tbl.itemThumb = function(arg)
-		if not arg then
-			return nil
-		end
-		local str = tostring(arg)
-		if tbl.thumbCache[str] ~= nil then
-			return tbl.thumbCache[str] or nil
-		end
-		local str2 = "https://thumbnails.roblox.com/v1/assets?assetIds=" .. str .. "&size=150x150&format=Png&isCircular=false"
-
-		local ok, result = pcall(function()
-			return game:HttpGet(str2)
-		end)
-
-		ok = ok and type(result) == "string" and result:match("\"imageUrl\"%s*:%s*\"([^\"]+)\"") or nil
-
-		if ok and ok:find("PrivateImage", 1, true) then
-			ok = nil
-		end
-
-		tbl.thumbCache[str] = ok or false
-		return ok
-	end
-
-	tbl.SHELL_IMG = "https://static.wikia.nocookie.net/murder-mystery-2/images/e/e5/Shells.png/revision/latest?cb=20260724145424"
-	tbl.ZWSP = utf8.char(8203)
-
-	tbl.pad3 = function(arg)
-		local tbl2 = {}
-		local tbl3 = {}
-
-		for _, v7 in ipairs(arg) do
-			if v7.inline then
-				tbl2[#tbl2 + 1] = v7
-			else
-				tbl3[#tbl3 + 1] = v7
-			end
-		end
-
-		while #tbl2 % 3 ~= 0 do
-			tbl2[#tbl2 + 1] = { name = tbl.ZWSP, value = tbl.ZWSP, inline = true }
-		end
-
-		for _, v7 in ipairs(tbl3) do
-			tbl2[#tbl2 + 1] = v7
-		end
-
-		return tbl2
-	end
-
-	tbl.SHELL_KEY = "SummerKey2026"
-	tbl.SBOX_COST = 120
-	tbl.shellsLeft = nil
-	tbl.coinsTotal = nil
-
-	tbl.readOwned = function()
-		local ok, result = pcall(require, game:GetService("ReplicatedStorage").Modules.ProfileData)
-		if not ok or type(result) ~= "table" then
-			return nil
-		end
-		local owned = result.Materials and result.Materials.Owned
-		return type(owned) == "table" and owned or nil
-	end
-
-	tbl.readXP = function()
-		local ok, result = pcall(require, game:GetService("ReplicatedStorage").Modules.ProfileData)
-		if not ok or type(result) ~= "table" then
-			return nil
-		end
-		return tonumber(result.NewXP)
-	end
-
-	tbl.readLevel = function()
-		local v7 = tbl.readXP()
-		if not v7 then
-			return nil
-		end
-		local ok, result = pcall(require, game:GetService("ReplicatedStorage").Modules.LevelModule)
-		if not ok or type(result) ~= "table" or type(result.GetLevel) ~= "function" then
-			return nil
-		end
-		local ok2, result2 = pcall(result.GetLevel, v7)
-		return ok2 and tonumber(result2) or nil
-	end
-
-	tbl.readShells = function()
-		local v7 = tbl.readOwned()
-		if not v7 then
-			return nil
-		end
-		local shellsLeft = tonumber(v7[tbl.SHELL_KEY]) or 0
-		tbl.shellsLeft = shellsLeft
-		return shellsLeft
-	end
-
-	tbl.readCoins = function()
-		local v7 = tbl.readOwned()
-		if not v7 then
-			return nil
-		end
-		local coinsTotal = tonumber(v7.Coins) or 0
-		tbl.coinsTotal = coinsTotal
-		return coinsTotal
-	end
-
-	tbl.whBox = function(arg)
-		if not tbl.whReady() then
-			return false, "no webhook set"
-		end
-		local ok, result = pcall(require, game:GetService("ReplicatedStorage").Database.Sync.Item)
-		local flag19 = ok and type(result) == "table" and result[arg] or nil
-		flag19 = type(flag19) == "table" and flag19 or {}
-		tbl.readShells()
-		local str = tostring(flag19.ItemName or arg)
-		local str2 = tostring(flag19.Rarity or "Unknown")
-		local whPost = tbl.whPost
-
-		local tbl2 = {
-			ping = str2:lower() == "godly",
-			title = "Opened a Summer Box!",
-			body = "Skin: **" .. str .. "**\n\n**Info:**",
-			thumb = tbl.itemThumb(flag19.ItemID),
-		}
-
-		local fields = {}
-		local Rarity = tbl.fld("Rarity", str2)
-		local Cost = tbl.fld("Cost", tbl.comma(tbl.SBOX_COST))
-		local fld = tbl.fld
-		local comma = tbl.comma
-		local shellsLeft = tbl.shellsLeft
-		fields[1] = Rarity
-		fields[2] = Cost
-
-		do
-			local values = table.pack(fld("Shells left", comma(shellsLeft)))
-			table.move(values, 1, values.n, 3, fields)
-		end
-
-		tbl2.fields = fields
-		return whPost(tbl2)
-	end
-
-	tbl.whReward = function(arg, arg2, arg3)
-		if not tbl.whReady() then
-			return false, "no webhook set"
-		end
-		local str = tostring(arg or ""):gsub("^%s*[xX]%s*", "")
-		local v7 = tonumber
-		local str2 = str:gsub("[^%d%.]", "")
-		local str3 = v7(str2)
-
-		if tostring(arg2 or "reward"):lower():find("shell", 1, true) then
-			if not tbl.readShells() and str3 and type(tbl.shellsLeft) == "number" then
-				tbl.shellsLeft = tbl.shellsLeft + str3
-			end
-
-			str3 = str3 and tbl.comma(str3) or str ~= "" and str or "?"
-			local tbl2 = {}
-			local Received = tbl.fld("Received", "+" .. str3 .. " Shells")
-			local fld = tbl.fld
-			local str4 = tbl.comma(tbl.shellsLeft) .. " Shells"
-			tbl2[1] = Received
-
-			do
-				local values = table.pack(fld("Balance", str4))
-				table.move(values, 1, values.n, 2, tbl2)
-			end
-
-			if type(tbl.shellsLeft) == "number" then
-				local n4 = tbl.SBOX_COST - tbl.shellsLeft
-				tbl2[#tbl2 + 1] = tbl.fld("Next box", n4 > 0 and tbl.comma(n4) .. " Shells left" or tbl.comma(math.floor(tbl.shellsLeft / tbl.SBOX_COST)) .. " boxes ready")
-			end
-
-			return tbl.whPost({
-				title = utf8.char(128026) .. "  +" .. str3 .. " shells",
-				thumb = tbl.SHELL_IMG,
-				fields = tbl.pad3(tbl2),
-			})
-		end
-
-		str3 = str3 and tbl.comma(str3) or str ~= "" and str or nil
-		local v8
-
-		return tbl.whPost({
-			title = "Reward claimed",
-			body = str3 and "Received **" .. str3 .. "** " .. v8 .. "." or "Received **" .. v8 .. "**.",
-			thumb = tbl.itemThumb(arg3),
-		})
+		local str = tostring(math.floor(math.abs(tonumber(arg) or 0)))
+		local left, num, right = string.match(str, "^([^%d]*%d)(%d*)(.-)$")
+		return left .. (num:reverse():gsub("(%d%d%d)", "%1,"):reverse()) .. right
 	end
 
 	tbl.roundCoins = 0
@@ -4571,70 +3703,6 @@ do
 		end
 	end
 
-	tbl.whRound = function()
-		if not tbl.whReady() then
-			return false, "not sending"
-		end
-		tbl.readCoins()
-		tbl.readShells()
-		local roundCoinsAuth = tbl.roundCoinsAuth or tbl.roundCoins or 0
-		local n4
-
-		if tbl.roundLength and tbl.roundLastT then
-			n4 = math.max(0, math.floor(tbl.roundLength - tbl.roundLastT))
-		else
-			n4 = nil
-
-			if tbl.roundStart then
-				local roundStart = tbl.roundStart
-				n4 = math.max(0, math.floor(os.clock() - roundStart))
-			end
-		end
-
-		n4 = n4 and string.format("%dm %02ds", math.floor(n4 / 60), n4 % 60) or "?"
-		local v7 = tbl.readXP()
-		local roundXP0 = v7 and tbl.roundXP0
-		local n5 = nil
-
-		if roundXP0 then
-			n5 = math.max(0, math.floor(v7 - tbl.roundXP0))
-		end
-
-		local whPost = tbl.whPost
-
-		local tbl2 = {
-			title = "Round Over.",
-			thumb = tbl.itemThumb(tbl.COIN_ICON),
-			body = "Collected: **+" .. tbl.comma(roundCoinsAuth) .. "** Coins\n\n**Other Info:**",
-		}
-
-		local fields = {}
-		local v8 = tbl.fld("Coins Balance", tbl.comma(tbl.coinsTotal))
-		local v9 = tbl.fld("Played For", n4)
-		local v10 = tbl.fld("XP Gained", n5 and "+" .. tbl.comma(n5) or "?")
-		local v11 = tbl.fld("Shell Balance", tbl.comma(tbl.shellsLeft))
-		local Role = tbl.fld("Role", tbl.roleText())
-		local fld = tbl.fld
-		local v12 = table.pack(tbl.comma(tbl.readLevel()))
-		v12.n = 2 + v12.n - 1
-		table.move(v12, 1, v12.n, 2, v12)
-		v12[1] = "Current Level"
-		local v13 = table.pack(fld(table.unpack(v12, 1, v12.n)))
-		fields[1] = v8
-		fields[2] = v9
-		fields[3] = v10
-		fields[4] = v11
-		fields[5] = Role
-
-		do
-			local values = table.pack(table.unpack(v13, 1, v13.n))
-			table.move(values, 1, values.n, 6, fields)
-		end
-
-		tbl2.fields = fields
-		return whPost(tbl2)
-	end
-
 	tbl.roundBegin = function(roundLength)
 		tbl.roundCoins = 0
 		tbl.roundCoinsAuth = nil
@@ -4669,23 +3737,7 @@ do
 		end
 		tbl.roundLive = false
 		tbl.roundSnapshot()
-
-		task.spawn(function()
-			local now = os.clock()
-
-			while os.clock() - now < 30 do
-				local flag19 = (tbl.readXP() or 0) ~= (tbl.roundXP0 or 0)
-				if not (tbl.roundWin and flag19) then
-					task.wait(0.25)
-					continue
-				end
-				break
-			end
-
-			pcall(tbl.whRound)
-		end)
 	end
-
 	task.spawn(function()
 		local ReplicatedStorage_ = game:GetService("ReplicatedStorage")
 		local roundTimerPart = workspace:WaitForChild("RoundTimerPart", 30)
@@ -4872,6 +3924,58 @@ do
 		return true
 	end
 
+	tbl.flingUntilDead = function(targetGetter)
+		local flingStart = tick()
+		local targetName = "Murderer"
+		local targetDied = false
+		local attempts = 0
+		while tick() - flingStart < 25 do
+			local target
+			if typeof(targetGetter) == "function" then
+				target = targetGetter()
+			else
+				target = targetGetter
+			end
+			if not target or target == localPlayer or not target.Parent or not target.Character then
+				if attempts > 0 then
+					targetDied = true
+				end
+				break
+			end
+			targetName = target.Name
+			local targetHum = target.Character:FindFirstChildOfClass("Humanoid")
+			if not targetHum or targetHum.Health <= 0 then
+				if attempts > 0 then
+					targetDied = true
+				end
+				break
+			end
+			local targetRoot = target.Character:FindFirstChild("HumanoidRootPart")
+			if not targetRoot then
+				if attempts > 0 then
+					targetDied = true
+				end
+				break
+			end
+			local myChar = localPlayer.Character
+			local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+			if not myHum or myHum.Health <= 0 then
+				break
+			end
+			if targetRoot.Position.Y < -50 then
+				task.wait(0.2)
+				continue
+			end
+			attempts += 1
+			flag6 = false
+			pcall(fn9, target, true)
+			task.wait(0.15)
+		end
+		if targetDied then
+			v:Notify({ Title = "Target Dead!", Content = targetName .. " eliminated!", Duration = 2, Icon = "flame" })
+		end
+	end
+
 	tbl.finishFling = function()
 		if not tbl.flingWhenDone then
 			return
@@ -4897,15 +4001,6 @@ do
 
 		task.spawn(function()
 			if flag12 then
-				local str = " coins. Resetting, then flinging " .. v7.Name .. "..."
-
-				v:Notify({
-					Title = "Farm Done!",
-					Content = "Collected " .. tbl.comma(tbl.finishEarned) .. str,
-					Duration = 3,
-					Icon = "flame",
-				})
-
 				local humanoid = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
 
 				if humanoid and humanoid.Health > 0 then
@@ -4934,18 +4029,9 @@ do
 				if not v7 or v7 == localPlayer or not v7.Character then
 					return
 				end
-			else
-				local str = " coins. Flinging " .. v7.Name .. "..."
-
-				v:Notify({
-					Title = "Farm Done!",
-					Content = "Collected " .. tbl.comma(tbl.finishEarned) .. str,
-					Duration = 2,
-					Icon = "flame",
-				})
 			end
 
-			pcall(fn9, v7)
+			tbl.flingUntilDead(fn)
 		end)
 	end
 
@@ -4991,7 +4077,7 @@ do
 				Icon = "flame",
 			})
 
-			pcall(fn9, v7)
+			tbl.flingUntilDead(fn)
 		end)
 	end)
 
@@ -5595,13 +4681,20 @@ do
 	end
 
 	local function fn52()
-		for _, descendant in ipairs(Workspace:GetDescendants()) do
-			if descendant.Name == "GunDrop" and descendant.Parent then
-				return descendant
+		local drop = Workspace:FindFirstChild("GunDrop")
+		if drop and drop.Parent then
+			return drop
+		end
+		for _, child in ipairs(Workspace:GetChildren()) do
+			if child:IsA("Model") or child:IsA("Folder") then
+				local d = child:FindFirstChild("GunDrop")
+				if d and d.Parent then
+					return d
+				end
 			end
 		end
-
-		return nil
+		local fallback = Workspace:FindFirstChild("GunDrop", true)
+		return (fallback and fallback.Parent) and fallback or nil
 	end
 
 	local function fn53()
@@ -8739,7 +7832,7 @@ tbl.el.flingMurd = tbl11.fling:Button({
 			v:Notify({ Title = "Error!", Content = "You can't fling yourself!", Duration = 1.5, Icon = "x" })
 			return
 		end
-		fn9(v7)
+		task.spawn(tbl.flingUntilDead, fn)
 	end,
 })
 
@@ -9152,37 +8245,6 @@ do
 	})
 
 	tbl11.farm:Toggle({
-		Title = "Auto Claim Shells",
-		Flag = "Toggle_Auto_Claim_Shells",
-		Desc = "Claims the end-of-round reward popup for you",
-		Type = "Toggle",
-		Value = false,
-		Callback = function(shellsOn)
-			tbl.shellsOn = shellsOn
-
-			if shellsOn then
-				tbl.startShells()
-
-				v:Notify({
-					Title = "Auto Claim Shells On!",
-					Content = "Rewards claim themselves.",
-					Duration = 2,
-					Icon = "check",
-				})
-			else
-				tbl.stopShells()
-
-				v:Notify({
-					Title = "Auto Claim Shells Off!",
-					Content = "Claim them yourself.",
-					Duration = 2,
-					Icon = "power-off",
-				})
-			end
-		end,
-	})
-
-	tbl11.farm:Toggle({
 		Title = "Fling Murderer When Done",
 		Flag = "Toggle_Fling_Murderer_When_Done",
 		Desc = "Yeets the murderer once your bag is full or the coins run out",
@@ -9216,106 +8278,6 @@ do
 	fn31()
 	flag12 = true
 	fn29()
-	tbl11.farm:Section({ Title = "Webhook" })
-
-	tbl.el.whUrl = tbl11.farm:Input({
-		Title = "Webhook URL",
-		Flag = "Input_Discord_Webhook",
-		Desc = "Paste a webhook and logging starts. Logs box opens, shell claims and round coins. Empty the box to stop.",
-		Placeholder = "https://discord.com/api/webhooks/...",
-		Callback = function(arg)
-			local whUrl = tostring(arg or "")
-
-			if whUrl ~= tostring(tbl.WH_URL or "") then
-				tbl.saidHello = false
-				tbl.whBreak = false
-				tbl.whLastErr = nil
-			end
-
-			tbl.WH_URL = whUrl
-		end,
-	})
-
-	tbl.el.whOn = tbl11.farm:Toggle({
-		Title = "Start Sender",
-		Flag = "Toggle_Discord_Sender",
-		Desc = "Starts posting to the webhook above. Logs box opens, shell claims and the coins each round paid out.",
-		Type = "Toggle",
-		Value = false,
-		Callback = function(whOn)
-			tbl.whOn = whOn
-			if not whOn then
-				return
-			end
-
-			task.spawn(function()
-				local v10, v11 = tbl.whHello()
-
-				v:Notify({
-					Title = v10 and "Sender Started" or "Sender Failed",
-					Content = v10 and "Posted the opening message to your webhook." or "Could not post: " .. tostring(v11) .. ".",
-					Duration = 6,
-					Icon = v10 and "check" or "x",
-				})
-
-				if not v10 then
-					tbl.whOn = false
-					tbl.setToggle(tbl.el.whOn, false)
-				end
-			end)
-		end,
-	})
-
-	tbl11.farm:Section({ Title = "Auto Open Boxes" })
-	tbl.el.box = {}
-
-	for _, boxe in ipairs(tbl.BOXES) do
-		local v10 = boxe[1]
-		local v11 = boxe[2]
-		local v12, v13 = tbl.boxPrice(v10)
-
-		tbl.el.box[v10] = tbl11.farm:Toggle({
-			Title = "Auto Open " .. v11,
-			Flag = "Toggle_Box_" .. v10:gsub("%W", "_"),
-			Desc = "Waits until you get " .. (v13 and tbl.comma(v13) or "?") .. " " .. tbl.curName(v12) .. ", then auto-opens the box for you!",
-			Type = "Toggle",
-			Value = false,
-			Callback = function(arg)
-				tbl.boxOn[v10] = arg
-
-				if arg then
-					tbl.startBox(v10, v11)
-				else
-					tbl.stopBox(v10)
-				end
-			end,
-		})
-
-		local v14 = tbl.boxImage(v10)
-
-		if v14 then
-			pcall(function()
-				tbl.el.box[v10]:SetImage(v14, 30)
-			end)
-		end
-
-		if v10 == "Summer2026Box" then
-			local elementFrame = tbl.el.box[v10] and tbl.el.box[v10].ElementFrame
-
-			if typeof(elementFrame) == "Instance" then
-				local uiGradient = elementFrame:FindFirstChildWhichIsA("UIGradient")
-
-				if uiGradient then
-					uiGradient:Destroy()
-				end
-
-				local uiGradient2 = Instance.new("UIGradient")
-				uiGradient2.Color = ColorSequence.new(ICON.yellow, ICON.teal)
-				uiGradient2.Parent = elementFrame
-			end
-		end
-	end
-
 	fn52(ICON.mono)
 
 	tbl11.buttons:Toggle({
@@ -12531,18 +11493,6 @@ tbl.perf.stopDrain = function()
 end
 
 tbl.perf.startDrain = function()
-	tbl.perf.stopDrain()
-
-	tbl.perf.drainThread = task.spawn(function()
-		while true do
-			task.wait()
-			local ok, result = pcall(tbl.perf.drainStep)
-
-			if not ok then
-				warn("[GSCRIPTS] performance queue: " .. tostring(result))
-			end
-		end
-	end)
 end
 
 tbl.perf.safeApply = function(arg)
@@ -12575,27 +11525,6 @@ end
 tbl.perf.resweep = false
 
 tbl.perf.sweep = function()
-	if tbl.perf.sweeping then
-		tbl.perf.resweep = true
-		return
-	end
-	tbl.perf.sweeping = true
-
-	while true do
-		tbl.perf.resweep = false
-		local ok, result = pcall(tbl.perf.sweepBody)
-
-		if not ok then
-			warn("[GSCRIPTS] performance sweep: " .. tostring(result))
-		end
-
-		if tbl.perf.resweep then
-			continue
-		end
-		break
-	end
-
-	tbl.perf.sweeping = false
 end
 
 tbl.perf.PROP_STASHES = { "part", "volume", "texid", "enabled" }
@@ -12662,52 +11591,9 @@ tbl.perf.stopPulse = function()
 end
 
 tbl.perf.startPulse = function()
-	tbl.perf.stopPulse()
-
-	tbl.perf.pulseThread = task.spawn(function()
-		while true do
-			task.wait(tbl.perf.PULSE)
-			local ok, result = pcall(tbl.perf.sweep)
-
-			if not ok then
-				warn("[GSCRIPTS] performance re-sweep: " .. tostring(result))
-			end
-
-			local ok2, result2 = pcall(tbl.perf.prune)
-
-			if not ok2 then
-				warn("[GSCRIPTS] performance prune: " .. tostring(result2))
-			end
-		end
-	end)
 end
 
 tbl.perf.syncWatcher = function()
-	local textures = tbl.perf.on.textures or tbl.perf.on.effects or tbl.perf.on.sounds or tbl.perf.on.anims or tbl.perf.on.weaponfx or tbl.perf.on.pets
-
-	if textures and not tbl.perf.watchConn then
-		tbl.perf.watchConn = Workspace.DescendantAdded:Connect(tbl.perf.enqueue)
-		tbl.perf.startDrain()
-		tbl.perf.startPulse()
-	elseif not textures and tbl.perf.watchConn then
-		pcall(function()
-			tbl.perf.watchConn:Disconnect()
-		end)
-
-		tbl.perf.watchConn = nil
-		tbl.perf.stopDrain()
-		tbl.perf.stopPulse()
-	end
-
-	if tbl.perf.on.weaponfx and not tbl.perf.playerConn then
-		tbl.perf.playerConn = localPlayer.DescendantAdded:Connect(tbl.perf.enqueue)
-	elseif not tbl.perf.on.weaponfx and tbl.perf.playerConn then
-		pcall(function()
-			tbl.perf.playerConn:Disconnect()
-		end)
-
-		tbl.perf.playerConn = nil
-	end
 end
 
 tbl.perf.restoreOwned = function(arg)
@@ -14155,14 +13041,6 @@ local function gscriptsCleanup()
 	fn28()
 	fn30()
 	fn32()
-	tbl.stopShells()
-	local v7 = ipairs
-	local boxes = tbl.BOXES or {}
-
-	for _, boxe in v7(boxes) do
-		tbl.boxOn[boxe[1]] = false
-	end
-
 	tbl.stopFarmHopWatch()
 	tbl.flingAllRunning = false
 	tbl5.enabled = false
